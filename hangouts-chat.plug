@@ -1,0 +1,6 @@
+[Core]
+Name = Google-Hangouts-Chat
+Module = hangouts_chat
+
+[Documentation]
+Description = A Google-Hangouts-Chat backend for Err
