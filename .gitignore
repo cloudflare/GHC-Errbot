@@ -1,0 +1,6 @@
+.Python
+__pycache__
+bin
+lib
+include
+*.json
