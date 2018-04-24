@@ -1,12 +1,12 @@
+import json
+import httplib2
+import logging
 from errbot.backends.base import Message
 from errbot.backends.base import Person
 from errbot.backends.base import Room
 from errbot.errBot import ErrBot
 from google.cloud import pubsub
 from oauth2client.service_account import ServiceAccountCredentials
-import json
-import httplib2
-import logging
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
@@ -42,6 +42,7 @@ class GoogleHangoutsChatBackend(ErrBot):
     def __init__(self, config):
         super().__init__(config)
         identity = config.BOT_IDENTITY
+        self.at_name = identity['@_NAME']
         self.creds_file = identity['GOOGLE_CREDS_FILE']
         self.gce_project = identity['GOOGLE_CLOUD_ENGINE_PROJECT']
         self.gce_topic = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC']
@@ -49,29 +50,17 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.http_client = self._get_authenticated_http_client('https://www.googleapis.com/auth/chat.bot')
         self.bot_identifier = None
 
-        self._preload_rooms()
-
     def _get_google_credentials(self, scope):
         return ServiceAccountCredentials.from_json_keyfile_name(self.creds_file, scopes=[scope])
 
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name):
         subscriber = pubsub.SubscriberClient()
-        topic = 'projects/{}/topics/{}'.format(project, topic_name)
         subscription_name = 'projects/{}/subscriptions/{}'.format(project, subscription_name)
         log.info("Subscribed to {}".format(subscription_name))
         return subscriber.subscribe(subscription_name)
 
     def _get_authenticated_http_client(self, scope):
         return self._get_google_credentials(scope).authorize(httplib2.Http())
-
-    def _find_myself(self, message):
-        annotations = message['message']['annotations']
-        for annotation in annotations:
-            if annotation['type'] != 'USER_MENTION': continue
-            if annotation['userMention']['user']['displayName'] == 'RespectTables':
-                self.bot_identifier = self.bot_identifier or annotation['userMention']['user']
-                return annotation['userMention']['user']
-        return self.bot_identifier
 
     def _handle_message(self, message):
         data = json.loads(message.data)
@@ -80,14 +69,12 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob['displayName'], 
                                   sender_blob['email'],
                                   sender_blob['type'])
-        receiver_blob = self._find_myself(data)
-        receiver = HangoutsChatUser(receiver_blob['name'],
-                                    receiver_blob['displayName'],
-                                    '', receiver_blob['type'])
         message_body = data['message']['text']
-        if message_body.startswith('@RespectTables'):
-            message_body = message_body[len('@RespectTables'):]
+        # If the message starts with @bot, trim that out before we send it off for processing
+        if message_body.startswith(self.at_name):
+            message_body = message_body[len(self.at_name):]
         message.ack()
+        log.info(json.dumps(data['message']['annotations'], indent=4))
         context = {
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
@@ -128,7 +115,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         try:
             future.result()
         except Exception:
-            log.info("Exitting")
+            log.info("Exiting")
             raise
         finally:
             subscription.close()
@@ -136,15 +123,13 @@ class GoogleHangoutsChatBackend(ErrBot):
             self.shutdown()
 
     def build_identifier(self, strrep):
-        log.info(strrep)
         return HangoutsChatUser(None, strrep, None, None)
 
     def build_reply(self, msg, text=None, private=False, threaded=False):
-        log.info("Built {}".format("cats"))
         response = Message(body=text, frm=msg.to, to=msg.frm, extras=msg.extras)
         return response
 
-    def change_presence(status='online', message=''):
+    def change_presence(self, status='online', message=''):
         return None
 
     @property
