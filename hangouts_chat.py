@@ -16,6 +16,32 @@ def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com
 def _get_google_credentials(creds_file, scope):
     return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
 
+class HangoutsChatRoom(Room):
+    """
+    Represents a 'Space' in Google-Hangouts-Chat terminology
+    """
+    def __init__(self, space_id, google_creds_file):
+        super().__init__()
+        self.space_id = space_id
+        self.creds_file = google_creds_file
+        self._load()
+
+    def _load(self):
+        http_client = _get_authenticated_http_client(self.creds_file)
+
+        url = 'https://chat.googleapis.com/v1/spaces/{}'.format(self.space_id)
+        response, content = http_client.request(uri=url, method='GET')
+        if response['status'] == '200':
+            content_json = json.loads(content)
+            self.display_name = content_json['displayName']
+            self.exists = True
+        else:
+            self.exists = False
+            self.display_name = ''
+
+    def exists():
+        return self.exists
+
 class HangoutsChatUser(Person):
     def __init__(self, name, display_name, email, user_type):
         super().__init__()
@@ -136,7 +162,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         return 'Google_Hangouts_Chat'
 
     def query_room(self, room):
-        return None
+        return HangoutsChatRoom(room, self.creds_file)
 
     def rooms(self):
         return None
