@@ -74,7 +74,6 @@ class GoogleHangoutsChatBackend(ErrBot):
         if message_body.startswith(self.at_name):
             message_body = message_body[len(self.at_name):]
         message.ack()
-        log.info(json.dumps(data['message']['annotations'], indent=4))
         context = {
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
@@ -134,7 +133,7 @@ class GoogleHangoutsChatBackend(ErrBot):
 
     @property
     def mode(self):
-        return 'Null'
+        return 'Google_Hangouts_Chat'
 
     def query_room(self, room):
         return None
