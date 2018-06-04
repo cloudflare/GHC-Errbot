@@ -10,6 +10,12 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
+def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com/auth/chat.bot'):
+    return _get_google_credentials(creds_file, scope).authorize(httplib2.Http())
+
+def _get_google_credentials(creds_file, scope):
+    return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
+
 class HangoutsChatUser(Person):
     def __init__(self, name, display_name, email, user_type):
         super().__init__()
@@ -47,20 +53,14 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.gce_project = identity['GOOGLE_CLOUD_ENGINE_PROJECT']
         self.gce_topic = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC']
         self.gce_subscription = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION']
-        self.http_client = self._get_authenticated_http_client('https://www.googleapis.com/auth/chat.bot')
+        self.http_client = _get_authenticated_http_client(self.creds_file)
         self.bot_identifier = None
-
-    def _get_google_credentials(self, scope):
-        return ServiceAccountCredentials.from_json_keyfile_name(self.creds_file, scopes=[scope])
 
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name):
         subscriber = pubsub.SubscriberClient()
         subscription_name = 'projects/{}/subscriptions/{}'.format(project, subscription_name)
         log.info("Subscribed to {}".format(subscription_name))
         return subscriber.subscribe(subscription_name)
-
-    def _get_authenticated_http_client(self, scope):
-        return self._get_google_credentials(scope).authorize(httplib2.Http())
 
     def _handle_message(self, message):
         data = json.loads(message.data)
