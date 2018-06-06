@@ -139,9 +139,8 @@ class GoogleHangoutsChatBackend(ErrBot):
         future = subscription.open(self._handle_message)
         try:
             future.result()
-        except Exception:
+        except KeyboardInterrupt:
             log.info("Exiting")
-            raise
         finally:
             subscription.close()
             self.disconnect_callback()
