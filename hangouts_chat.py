@@ -3,7 +3,7 @@ import httplib2
 import logging
 from errbot.backends.base import Message
 from errbot.backends.base import Person
-from errbot.backends.base import Room
+from errbot.backends.base import Room, RoomError
 from errbot.errBot import ErrBot
 from google.cloud import pubsub
 from oauth2client.service_account import ServiceAccountCredentials
@@ -15,6 +15,16 @@ def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com
 
 def _get_google_credentials(creds_file, scope):
     return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
+
+class RoomsNotSupportedError(RoomError):
+    def __init__(self, message=None):
+        if message is None:
+            message = (
+                "Room Operations are not supported in Google Hangouts Chat."
+                "While Rooms are a _concept_, the API is minimal and does not "
+                "expose this functionality to bots"
+            )
+        super().__init__(message)
 
 class HangoutsChatRoom(Room):
     """
@@ -34,13 +44,42 @@ class HangoutsChatRoom(Room):
         if response['status'] == '200':
             content_json = json.loads(content)
             self.display_name = content_json['displayName']
-            self.exists = True
+            self.does_exist = True
         else:
-            self.exists = False
+            self.does_exist = False
             self.display_name = ''
 
-    def exists():
-        return self.exists
+    def join(self, username = None, password = None):
+        raise RoomsNotSupportedError()
+
+    def create(self):
+        raise RoomsNotSupportedError()
+
+    def leave(self, reason = None):
+        raise RoomsNotSupportedError()
+
+    def destroy(self):
+        raise RoomsNotSupportedError()
+
+    @property
+    def joined(self):
+        raise RoomsNotSupportedError()
+
+    @property
+    def exists(self):
+        raise RoomsNotSupportedError()
+
+    @property
+    def topic(self):
+        raise RoomsNotSupportedError()
+
+    @property
+    def occupants(self):
+        raise RoomsNotSupportedError()
+
+    def invite(self, *args):
+        raise RoomsNotSupportedError()
+    
 
 class HangoutsChatUser(Person):
     def __init__(self, name, display_name, email, user_type):
@@ -125,12 +164,6 @@ class GoogleHangoutsChatBackend(ErrBot):
         response, content = self.http_client.request(uri=url, method='POST',
                                                     headers={'Content-Type': 'application/json; charset=UTF-8'},
                                                     body=json.dumps(message_payload))
-
-    def respond_to(self, incoming_message, outgoing_message):
-        outgoing_message['space_id'] = incoming_message.extras['space_id']
-        outgoing_message['thread_id'] = incoming_message.extras['thread_id']
-
-        self.send_message(outgoing_message)
 
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project, self.gce_topic, self.gce_subscription)
