@@ -128,7 +128,10 @@ class GoogleHangoutsChatBackend(ErrBot):
         return subscriber.subscribe(subscription_name, callback=callback)
 
     def _handle_message(self, message):
-        data = json.loads(message.data)
+        data = json.loads(message.data.decode('utf-8'))
+        if not data.get('message'):
+            message.ack()
+            return
         sender_blob = data['message']['sender']
         sender = HangoutsChatUser(sender_blob['name'], 
                                   sender_blob['displayName'], 
