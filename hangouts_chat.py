@@ -121,11 +121,11 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.http_client = _get_authenticated_http_client(self.creds_file)
         self.bot_identifier = None
 
-    def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name):
+    def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name, callback):
         subscriber = pubsub.SubscriberClient()
         subscription_name = 'projects/{}/subscriptions/{}'.format(project, subscription_name)
         log.info("Subscribed to {}".format(subscription_name))
-        return subscriber.subscribe(subscription_name)
+        return subscriber.subscribe(subscription_name, callback=callback)
 
     def _handle_message(self, message):
         data = json.loads(message.data)
@@ -166,12 +166,13 @@ class GoogleHangoutsChatBackend(ErrBot):
                                                     body=json.dumps(message_payload))
 
     def serve_forever(self):
-        subscription = self._subscribe_to_pubsub_topic(self.gce_project, self.gce_topic, self.gce_subscription)
+        subscription = self._subscribe_to_pubsub_topic(self.gce_project, self.gce_topic, self.gce_subscription, self._handle_message)
         self.connect_callback()
 
-        future = subscription.open(self._handle_message)
         try:
-            future.result()
+            import time
+            while True:
+                time.sleep(10)
         except KeyboardInterrupt:
             log.info("Exiting")
         finally:
