@@ -42,7 +42,7 @@ class HangoutsChatRoom(Room):
         url = 'https://chat.googleapis.com/v1/spaces/{}'.format(self.space_id)
         response, content = http_client.request(uri=url, method='GET')
         if response['status'] == '200':
-            content_json = json.loads(content)
+            content_json = json.loads(content.decode('utf-8'))
             self.display_name = content_json['displayName']
             self.does_exist = True
         else:
