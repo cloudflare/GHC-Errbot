@@ -8,6 +8,8 @@ from errbot.errBot import ErrBot
 from google.cloud import pubsub
 from oauth2client.service_account import ServiceAccountCredentials
 
+from markdownconverter import hangoutschat_markdown_converter
+
 log = logging.getLogger('errbot.backends.hangoutschat')
 
 def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com/auth/chat.bot'):
@@ -121,6 +123,8 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.http_client = _get_authenticated_http_client(self.creds_file)
         self.bot_identifier = HangoutsChatUser(None, self.at_name, None, None)
 
+        self.md = hangoutschat_markdown_converter()
+
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name, callback):
         subscriber = pubsub.SubscriberClient()
         subscription_name = 'projects/{}/subscriptions/{}'.format(project, subscription_name)
@@ -158,7 +162,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             return
         thread_id = message.extras.get('thread_id', None)
         message_payload = {
-            'text': message.body
+            'text': self.md.convert(message.body)
         }
 
         if thread_id:
