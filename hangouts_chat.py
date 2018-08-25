@@ -216,4 +216,22 @@ class GoogleHangoutsChatBackend(ErrBot):
         return HangoutsChatRoom(room, self.creds_file)
 
     def rooms(self):
-        return None
+        baseurl = 'https://chat.googleapis.com/v1/spaces'
+        rooms = []
+
+        def get_rooms(pageSize=1000, nextPageToken=None):
+            url = f'{baseurl}?pageSize={pageSize}'
+            if nextPageToken:
+                url += f'&nextPageToken={nextPageToken}'
+            response, content = self.http_client.request(uri=url, method='GET')
+            if response['status'] == '200':
+                content_json = json.loads(content.decode('utf-8'))
+                for space in content_json['spaces']:
+                    rooms.append(space['displayName'])
+                return content_json.get('nextPageToken')
+
+        nextPageToken = get_rooms()
+        while nextPageToken:
+            nextPageToken = get_rooms(nextPageToken=nextPageToken)
+
+        return rooms
