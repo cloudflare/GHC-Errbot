@@ -12,11 +12,14 @@ from markdownconverter import hangoutschat_markdown_converter
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
+
 def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com/auth/chat.bot'):
     return _get_google_credentials(creds_file, scope).authorize(httplib2.Http())
 
+
 def _get_google_credentials(creds_file, scope):
     return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
+
 
 class RoomsNotSupportedError(RoomError):
     def __init__(self, message=None):
@@ -27,6 +30,7 @@ class RoomsNotSupportedError(RoomError):
                 "expose this functionality to bots"
             )
         super().__init__(message)
+
 
 class HangoutsChatRoom(Room):
     """
@@ -51,13 +55,13 @@ class HangoutsChatRoom(Room):
             self.does_exist = False
             self.display_name = ''
 
-    def join(self, username = None, password = None):
+    def join(self, username=None, password=None):
         raise RoomsNotSupportedError()
 
     def create(self):
         raise RoomsNotSupportedError()
 
-    def leave(self, reason = None):
+    def leave(self, reason=None):
         raise RoomsNotSupportedError()
 
     def destroy(self):
@@ -81,7 +85,7 @@ class HangoutsChatRoom(Room):
 
     def invite(self, *args):
         raise RoomsNotSupportedError()
-    
+
 
 class HangoutsChatUser(Person):
     def __init__(self, name, display_name, email, user_type):
@@ -111,6 +115,7 @@ class HangoutsChatUser(Person):
     def aclattr(self):
         return self.email
 
+
 class GoogleHangoutsChatBackend(ErrBot):
     def __init__(self, config):
         super().__init__(config)
@@ -137,8 +142,8 @@ class GoogleHangoutsChatBackend(ErrBot):
             message.ack()
             return
         sender_blob = data['message']['sender']
-        sender = HangoutsChatUser(sender_blob['name'], 
-                                  sender_blob['displayName'], 
+        sender = HangoutsChatUser(sender_blob['name'],
+                                  sender_blob['displayName'],
                                   sender_blob['email'],
                                   sender_blob['type'])
         message_body = data['message']['text']
@@ -166,15 +171,20 @@ class GoogleHangoutsChatBackend(ErrBot):
         }
 
         if thread_id:
-            message_payload['thread'] = {'name': thread_id }
+            message_payload['thread'] = {'name': thread_id}
 
         url = 'https://chat.googleapis.com/v1/{}/messages'.format(space_id)
-        response, content = self.http_client.request(uri=url, method='POST',
-                                                    headers={'Content-Type': 'application/json; charset=UTF-8'},
-                                                    body=json.dumps(message_payload))
+        response, content = self.http_client.request(
+            uri=url,
+            method='POST',
+            headers={'Content-Type': 'application/json; charset=UTF-8'},
+            body=json.dumps(message_payload))
 
     def serve_forever(self):
-        subscription = self._subscribe_to_pubsub_topic(self.gce_project, self.gce_topic, self.gce_subscription, self._handle_message)
+        subscription = self._subscribe_to_pubsub_topic(self.gce_project,
+                                                       self.gce_topic,
+                                                       self.gce_subscription,
+                                                       self._handle_message)
         self.connect_callback()
 
         try:
