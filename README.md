@@ -35,6 +35,7 @@ BOT_IDENTITY = {
     'GOOGLE_CLOUD_ENGINE_PROJECT': '<your project name>',
     'GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC': '<your pub/sub topic>',
     'GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION': '<your pub/sub subscription name>',
-    '@_NAME': '<The @Name of your bot>'
 }
 ```
+
+5. Set BOT_PREFIX to the name of the bot, including the mention(`@`)
