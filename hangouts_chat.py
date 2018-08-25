@@ -113,13 +113,13 @@ class GoogleHangoutsChatBackend(ErrBot):
     def __init__(self, config):
         super().__init__(config)
         identity = config.BOT_IDENTITY
-        self.at_name = identity['@_NAME']
+        self.at_name = config.BOT_PREFIX
         self.creds_file = identity['GOOGLE_CREDS_FILE']
         self.gce_project = identity['GOOGLE_CLOUD_ENGINE_PROJECT']
         self.gce_topic = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC']
         self.gce_subscription = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION']
         self.http_client = _get_authenticated_http_client(self.creds_file)
-        self.bot_identifier = None
+        self.bot_identifier = HangoutsChatUser(None, self.at_name, None, None)
 
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name, callback):
         subscriber = pubsub.SubscriberClient()
@@ -138,15 +138,16 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob['email'],
                                   sender_blob['type'])
         message_body = data['message']['text']
-        # If the message starts with @bot, trim that out before we send it off for processing
-        if message_body.startswith(self.at_name):
-            message_body = message_body[len(self.at_name):]
         message.ack()
         context = {
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
         }
-        self.callback_message(Message(body=message_body.strip(), frm=sender, extras=context))
+        msg = Message(body=message_body.strip(), frm=sender, extras=context)
+        is_dm = data['message']['space']['type'] == 'DM'
+        if is_dm:
+            msg.to = self.bot_identifier
+        self.callback_message(msg)
 
     def send_message(self, message):
         super(GoogleHangoutsChatBackend, self).send_message(message)
