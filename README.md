@@ -39,3 +39,6 @@ BOT_IDENTITY = {
 ```
 
 5. Set BOT_PREFIX to the name of the bot, including the mention(`@`)
+
+# Acknowledgement
+The code in `markdownconverter.py` is from https://github.com/dr-BEat/errbot-backend-hangoutschat. It is MIT licensed.
