@@ -14,19 +14,11 @@ from markdownconverter import hangoutschat_markdown_converter
 log = logging.getLogger('errbot.backends.hangoutschat')
 
 
-def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com/auth/chat.bot'):
-    return _get_google_credentials(creds_file, scope).authorize(httplib2.Http())
-
-
-def _get_google_credentials(creds_file, scope):
-    return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
-
-
 class RoomsNotSupportedError(RoomError):
     def __init__(self, message=None):
         if message is None:
             message = (
-                "Room Operations are not supported in Google Hangouts Chat."
+                "Most Room operations are not supported in Google Hangouts Chat."
                 "While Rooms are a _concept_, the API is minimal and does not "
                 "expose this functionality to bots"
             )
@@ -130,24 +122,16 @@ class HangoutsChatRoom(Room):
     """
     Represents a 'Space' in Google-Hangouts-Chat terminology
     """
-    def __init__(self, space_id, google_creds_file):
+    def __init__(self, space_id, chat_api):
         super().__init__()
         self.space_id = space_id
-        self.creds_file = google_creds_file
+        self.chat_api = chat_api
         self._load()
 
     def _load(self):
-        http_client = _get_authenticated_http_client(self.creds_file)
-
-        url = 'https://chat.googleapis.com/v1/spaces/{}'.format(self.space_id)
-        response, content = http_client.request(uri=url, method='GET')
-        if response['status'] == '200':
-            content_json = json.loads(content.decode('utf-8'))
-            self.display_name = content_json['displayName']
-            self.does_exist = True
-        else:
-            self.does_exist = False
-            self.display_name = ''
+        space = self.chat_api.get_space(self.space_id)
+        self.does_exist = bool(space)
+        self.display_name = space['displayName'] if self.does_exist else ''
 
     def join(self, username=None, password=None):
         raise RoomsNotSupportedError()
@@ -175,7 +159,20 @@ class HangoutsChatRoom(Room):
 
     @property
     def occupants(self):
-        raise RoomsNotSupportedError()
+        memberships = self.chat_api.get_members(self.space_id)
+        occupants = []
+        for membership in memberships:
+            name = '{} ({} / {})'.format(membership['member']['displayName'],
+                                         membership['member']['name'],
+                                         membership['state'])
+            if membership['member']['type'] == 'BOT':
+                name += ' **BOT**'
+            occupants.append(HangoutsChatUser(name,
+                                              membership['member']['displayName'],
+                                              None,
+                                              membership['member']['type']))
+
+        return occupants
 
     def invite(self, *args):
         raise RoomsNotSupportedError()
@@ -219,7 +216,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.gce_project = identity['GOOGLE_CLOUD_ENGINE_PROJECT']
         self.gce_topic = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC']
         self.gce_subscription = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION']
-        self.http_client = _get_authenticated_http_client(self.creds_file)
+        self.chat_api = GoogleHangoutsChatAPI(self.creds_file)
         self.bot_identifier = HangoutsChatUser(None, self.at_name, None, None)
 
         self.md = hangoutschat_markdown_converter()
@@ -267,12 +264,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         if thread_id:
             message_payload['thread'] = {'name': thread_id}
 
-        url = 'https://chat.googleapis.com/v1/{}/messages'.format(space_id)
-        response, content = self.http_client.request(
-            uri=url,
-            method='POST',
-            headers={'Content-Type': 'application/json; charset=UTF-8'},
-            body=json.dumps(message_payload))
+        self.chat_api.create_message(space_id, message_payload)
 
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project,
@@ -307,25 +299,12 @@ class GoogleHangoutsChatBackend(ErrBot):
         return 'Google_Hangouts_Chat'
 
     def query_room(self, room):
-        return HangoutsChatRoom(room, self.creds_file)
+        return HangoutsChatRoom(room, self.chat_api)
 
     def rooms(self):
-        baseurl = 'https://chat.googleapis.com/v1/spaces'
-        rooms = []
-
-        def get_rooms(pageSize=1000, nextPageToken=None):
-            url = f'{baseurl}?pageSize={pageSize}'
-            if nextPageToken:
-                url += f'&nextPageToken={nextPageToken}'
-            response, content = self.http_client.request(uri=url, method='GET')
-            if response['status'] == '200':
-                content_json = json.loads(content.decode('utf-8'))
-                for space in content_json['spaces']:
-                    rooms.append(space['displayName'])
-                return content_json.get('nextPageToken')
-
-        nextPageToken = get_rooms()
-        while nextPageToken:
-            nextPageToken = get_rooms(nextPageToken=nextPageToken)
+        spaces = self.chat_api.get_spaces()
+        rooms = ['{} ({})'.format(space['displayName'], space['name'])
+                 for space in list(spaces) if space['type'] == 'ROOM']
+        log.debug(rooms)
 
         return rooms
