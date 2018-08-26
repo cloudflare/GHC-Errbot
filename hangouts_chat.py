@@ -1,6 +1,7 @@
 import json
 import httplib2
 import logging
+from typing import Iterable, Optional
 from errbot.backends.base import Message
 from errbot.backends.base import Person
 from errbot.backends.base import Room, RoomError
@@ -30,6 +31,99 @@ class RoomsNotSupportedError(RoomError):
                 "expose this functionality to bots"
             )
         super().__init__(message)
+
+
+class GoogleHangoutsChatAPI:
+    """
+    Represents the Google Hangouts REST API
+    See: https://developers.google.com/hangouts/chat/reference/rest/
+    """
+    base_url = 'https://chat.googleapis.com/v1'
+    # Numbe of results to fetch at a time. Default is 100, Max is 1000
+    page_size = 500
+
+    def __init__(self, creds_file: str, scope: str = 'https://www.googleapis.com/auth/chat.bot'):
+        self.creds_file = creds_file
+        self.scope = scope
+
+    @property
+    def credentials(self):
+        return ServiceAccountCredentials.from_json_keyfile_name(self.creds_file,
+                                                                scopes=[self.scope])
+
+    @property
+    def client(self):
+        return self.credentials.authorize(httplib2.Http())
+
+    def _get(self, uri: str, query_string: str = None) -> Optional[dict]:
+        url = '{}/{}'.format(self.base_url, uri)
+        if query_string:
+            url += '?{}'.format(query_string)
+        result, content = self.client.request(uri=url, method='GET')
+        if result['status'] == "200":
+            content_json = json.loads(content.decode('utf-8'))
+            return content_json
+        else:
+            log.error('status: {}, content: {}'.format(result['status'], content))
+
+    def _post(self, uri: str, body: dict, query_string: str = None) -> Optional[dict]:
+        url = '{}/{}'.format(self.base_url, uri)
+        if query_string:
+            url += '?{}'.format(query_string)
+        result, content = self.client.request(
+            uri=url,
+            method='POST',
+            headers={'Content-Type': 'application/json; charset=UTF-8'},
+            body=json.dumps(body))
+        if result['status'] == "200":
+            content_json = json.loads(content.decode('utf-8'))
+            return content_json
+        else:
+            log.error('status: {}, content: {}'.format(result['status'], content))
+
+    def _list(self, resource: str, return_attr: str, next_page_token: str = '') -> Iterable[dict]:
+        """
+        Gets a list of resources.
+
+        Args:
+            resource: name of resource to list
+            return_attr: name of attribute in the root of the response to get
+                        resources from
+            next_page_token: the nextPageToken returned by the previous call
+
+        Yields:
+            dict: the next found resource
+        """
+
+        query_string = 'pageSize={}'.format(self.page_size)
+        if next_page_token:
+            query_string += '&pageToken={}'.format(next_page_token)
+        data = self._get(resource, query_string)
+        if data:
+            for itm in data[return_attr]:
+                yield itm
+            next_page_token = data.get('nextPageToken')
+            if next_page_token != '':
+                yield from self._list(resource, return_attr, next_page_token)
+
+    def get_spaces(self) -> Iterable[dict]:
+        return self._list('spaces', 'spaces')
+
+    def get_space(self, name: str) -> Optional[dict]:
+        return self._get('spaces/{}'.format(name.lstrip('spaces/')))
+
+    def get_members(self, space_name: str) -> Iterable[dict]:
+        return self._list('spaces/{}/members'.format(space_name.lstrip('spaces/')), 'memberships')
+
+    def get_member(self, space_name: str, name: str) -> Optional[dict]:
+        return self._get('spaces/{}/members/{}'.format(space_name.lstrip('spaces/'), name))
+
+    def create_message(self, space_name: str, body: dict, thread_key: str = None) -> Optional[dict]:
+        url = 'spaces/{}/messages'.format(space_name.lstrip('spaces/'))
+        if thread_key is None:
+            return self._post(url, body)
+        else:
+            return self._post(url, body, 'threadKey={}'.format(thread_key))
 
 
 class HangoutsChatRoom(Room):
