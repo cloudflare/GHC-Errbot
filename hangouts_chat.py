@@ -1,6 +1,7 @@
 import json
 import httplib2
 import logging
+from typing import Iterable, Optional
 from errbot.backends.base import Message
 from errbot.backends.base import Person
 from errbot.backends.base import Room, RoomError
@@ -13,47 +14,117 @@ from markdownconverter import hangoutschat_markdown_converter
 log = logging.getLogger('errbot.backends.hangoutschat')
 
 
-def _get_authenticated_http_client(creds_file, scope='https://www.googleapis.com/auth/chat.bot'):
-    return _get_google_credentials(creds_file, scope).authorize(httplib2.Http())
-
-
-def _get_google_credentials(creds_file, scope):
-    return ServiceAccountCredentials.from_json_keyfile_name(creds_file, scopes=[scope])
-
-
 class RoomsNotSupportedError(RoomError):
     def __init__(self, message=None):
         if message is None:
             message = (
-                "Room Operations are not supported in Google Hangouts Chat."
+                "Most Room operations are not supported in Google Hangouts Chat."
                 "While Rooms are a _concept_, the API is minimal and does not "
                 "expose this functionality to bots"
             )
         super().__init__(message)
 
 
+class GoogleHangoutsChatAPI:
+    """
+    Represents the Google Hangouts REST API
+    See: https://developers.google.com/hangouts/chat/reference/rest/
+    """
+    base_url = 'https://chat.googleapis.com/v1'
+    # Numbe of results to fetch at a time. Default is 100, Max is 1000
+    page_size = 500
+
+    def __init__(self, creds_file: str, scope: str = 'https://www.googleapis.com/auth/chat.bot'):
+        self.creds_file = creds_file
+        self.scope = scope
+
+    @property
+    def credentials(self):
+        return ServiceAccountCredentials.from_json_keyfile_name(self.creds_file,
+                                                                scopes=[self.scope])
+
+    @property
+    def client(self):
+        return self.credentials.authorize(httplib2.Http())
+
+    def _request(self, uri: str, query_string: str = None, **kwargs) -> Optional[dict]:
+        request_args = {
+            'method': 'GET',
+            'headers': {'Content-Type': 'application/json; charset=UTF-8', }}
+        request_args.update(kwargs)
+        url = '{}/{}'.format(self.base_url, uri)
+        if query_string:
+            url += '?{}'.format(query_string)
+        result, content = self.client.request(
+            uri=url,
+            **request_args
+        )
+        if result['status'] == '200':
+            content_json = json.loads(content.decode('utf-8'))
+            return content_json
+        else:
+            log.error('status: {}, content: {}'.format(result['status'], content))
+
+    def _list(self, resource: str, return_attr: str, next_page_token: str = '') -> Iterable[dict]:
+        """
+        Gets a list of resources.
+
+        Args:
+            resource: name of resource to list
+            return_attr: name of attribute in the root of the response to get
+                        resources from
+            next_page_token: the nextPageToken returned by the previous call
+
+        Yields:
+            dict: the next found resource
+        """
+
+        query_string = 'pageSize={}'.format(self.page_size)
+        if next_page_token:
+            query_string += '&pageToken={}'.format(next_page_token)
+        data = self._request(resource, query_string=query_string)
+        if data:
+            for itm in data[return_attr]:
+                yield itm
+            next_page_token = data.get('nextPageToken')
+            if next_page_token != '':
+                yield from self._list(resource, return_attr, next_page_token)
+
+    def get_spaces(self) -> Iterable[dict]:
+        return self._list('spaces', 'spaces')
+
+    def get_space(self, name: str) -> Optional[dict]:
+        return self._request('spaces/{}'.format(name.lstrip('spaces/')))
+
+    def get_members(self, space_name: str) -> Iterable[dict]:
+        return self._list('spaces/{}/members'.format(space_name.lstrip('spaces/')), 'memberships')
+
+    def get_member(self, space_name: str, name: str) -> Optional[dict]:
+        return self._request('spaces/{}/members/{}'.format(space_name.lstrip('spaces/'), name))
+
+    def create_message(self, space_name: str, body: dict, thread_key: str = None) -> Optional[dict]:
+        url = 'spaces/{}/messages'.format(space_name.lstrip('spaces/'))
+        if thread_key is None:
+            return self._request(url, body=json.dumps(body), method='POST')
+        else:
+            return self._request(url, body=json.dumps(body), method='POST',
+                                 query_string='threadKey={}'.format(thread_key))
+
+
 class HangoutsChatRoom(Room):
     """
     Represents a 'Space' in Google-Hangouts-Chat terminology
     """
-    def __init__(self, space_id, google_creds_file):
+    def __init__(self, space_id, chat_api):
         super().__init__()
         self.space_id = space_id
-        self.creds_file = google_creds_file
+        self.chat_api = chat_api
         self._load()
 
     def _load(self):
-        http_client = _get_authenticated_http_client(self.creds_file)
-
-        url = 'https://chat.googleapis.com/v1/spaces/{}'.format(self.space_id)
-        response, content = http_client.request(uri=url, method='GET')
-        if response['status'] == '200':
-            content_json = json.loads(content.decode('utf-8'))
-            self.display_name = content_json['displayName']
-            self.does_exist = True
-        else:
-            self.does_exist = False
-            self.display_name = ''
+        space = self.chat_api.get_space(self.space_id)
+        self.does_exist = bool(space)
+        self.display_name = space['displayName'] if self.does_exist else ''
 
     def join(self, username=None, password=None):
         raise RoomsNotSupportedError()
@@ -81,7 +152,20 @@ class HangoutsChatRoom(Room):
 
     @property
     def occupants(self):
-        raise RoomsNotSupportedError()
+        memberships = self.chat_api.get_members(self.space_id)
+        occupants = []
+        for membership in memberships:
+            name = '{} ({} / {})'.format(membership['member']['displayName'],
+                                         membership['member']['name'],
+                                         membership['state'])
+            if membership['member']['type'] == 'BOT':
+                name += ' **BOT**'
+            occupants.append(HangoutsChatUser(name,
+                                              membership['member']['displayName'],
+                                              None,
+                                              membership['member']['type']))
+
+        return occupants
 
     def invite(self, *args):
         raise RoomsNotSupportedError()
@@ -125,7 +209,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.gce_project = identity['GOOGLE_CLOUD_ENGINE_PROJECT']
         self.gce_topic = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_TOPIC']
         self.gce_subscription = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION']
-        self.http_client = _get_authenticated_http_client(self.creds_file)
+        self.chat_api = GoogleHangoutsChatAPI(self.creds_file)
         self.bot_identifier = HangoutsChatUser(None, self.at_name, None, None)
 
         self.md = hangoutschat_markdown_converter()
@@ -173,12 +257,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         if thread_id:
             message_payload['thread'] = {'name': thread_id}
 
-        url = 'https://chat.googleapis.com/v1/{}/messages'.format(space_id)
-        response, content = self.http_client.request(
-            uri=url,
-            method='POST',
-            headers={'Content-Type': 'application/json; charset=UTF-8'},
-            body=json.dumps(message_payload))
+        self.chat_api.create_message(space_id, message_payload)
 
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project,
@@ -213,7 +292,11 @@ class GoogleHangoutsChatBackend(ErrBot):
         return 'Google_Hangouts_Chat'
 
     def query_room(self, room):
-        return HangoutsChatRoom(room, self.creds_file)
+        return HangoutsChatRoom(room, self.chat_api)
 
     def rooms(self):
-        return None
+        spaces = self.chat_api.get_spaces()
+        rooms = ['{} ({})'.format(space['displayName'], space['name'])
+                 for space in list(spaces) if space['type'] == 'ROOM']
+
+        return rooms
