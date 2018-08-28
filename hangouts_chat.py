@@ -265,6 +265,16 @@ class GoogleHangoutsChatBackend(ErrBot):
 
         self.chat_api.create_message(space_id, message_payload)
 
+    def send_card(self, cards, space_id, thread_id=None):
+        log.info("Sending card")
+        message_payload = {
+            'cards': cards
+        }
+        if thread_id:
+            message_payload['thread'] = {'name': thread_id}
+
+        self.chat_api.create_message(space_id, message_payload)
+
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project,
                                                        self.gce_topic,
