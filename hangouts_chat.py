@@ -47,27 +47,19 @@ class GoogleHangoutsChatAPI:
     def client(self):
         return self.credentials.authorize(httplib2.Http())
 
-    def _get(self, uri: str, query_string: str = None) -> Optional[dict]:
-        url = '{}/{}'.format(self.base_url, uri)
-        if query_string:
-            url += '?{}'.format(query_string)
-        result, content = self.client.request(uri=url, method='GET')
-        if result['status'] == "200":
-            content_json = json.loads(content.decode('utf-8'))
-            return content_json
-        else:
-            log.error('status: {}, content: {}'.format(result['status'], content))
-
-    def _post(self, uri: str, body: dict, query_string: str = None) -> Optional[dict]:
+    def _request(self, uri: str, query_string: str = None, **kwargs) -> Optional[dict]:
+        request_args = {
+            'method': 'GET',
+            'headers': {'Content-Type': 'application/json; charset=UTF-8', }}
+        request_args.update(kwargs)
         url = '{}/{}'.format(self.base_url, uri)
         if query_string:
             url += '?{}'.format(query_string)
         result, content = self.client.request(
             uri=url,
-            method='POST',
-            headers={'Content-Type': 'application/json; charset=UTF-8'},
-            body=json.dumps(body))
-        if result['status'] == "200":
+            **request_args
+        )
+        if result['status'] == '200':
             content_json = json.loads(content.decode('utf-8'))
             return content_json
         else:
@@ -90,7 +82,7 @@ class GoogleHangoutsChatAPI:
         query_string = 'pageSize={}'.format(self.page_size)
         if next_page_token:
             query_string += '&pageToken={}'.format(next_page_token)
-        data = self._get(resource, query_string)
+        data = self._request(resource, query_string=query_string)
         if data:
             for itm in data[return_attr]:
                 yield itm
@@ -102,20 +94,21 @@ class GoogleHangoutsChatAPI:
         return self._list('spaces', 'spaces')
 
     def get_space(self, name: str) -> Optional[dict]:
-        return self._get('spaces/{}'.format(name.lstrip('spaces/')))
+        return self._request('spaces/{}'.format(name.lstrip('spaces/')))
 
     def get_members(self, space_name: str) -> Iterable[dict]:
         return self._list('spaces/{}/members'.format(space_name.lstrip('spaces/')), 'memberships')
 
     def get_member(self, space_name: str, name: str) -> Optional[dict]:
-        return self._get('spaces/{}/members/{}'.format(space_name.lstrip('spaces/'), name))
+        return self._request('spaces/{}/members/{}'.format(space_name.lstrip('spaces/'), name))
 
     def create_message(self, space_name: str, body: dict, thread_key: str = None) -> Optional[dict]:
         url = 'spaces/{}/messages'.format(space_name.lstrip('spaces/'))
         if thread_key is None:
-            return self._post(url, body)
+            return self._request(url, body=json.dumps(body), method='POST')
         else:
-            return self._post(url, body, 'threadKey={}'.format(thread_key))
+            return self._request(url, body=json.dumps(body), method='POST',
+                                 query_string='threadKey={}'.format(thread_key))
 
 
 class HangoutsChatRoom(Room):
@@ -305,6 +298,5 @@ class GoogleHangoutsChatBackend(ErrBot):
         spaces = self.chat_api.get_spaces()
         rooms = ['{} ({})'.format(space['displayName'], space['name'])
                  for space in list(spaces) if space['type'] == 'ROOM']
-        log.debug(rooms)
 
         return rooms
