@@ -228,7 +228,13 @@ class GoogleHangoutsChatBackend(ErrBot):
         return subscriber.subscribe(subscription_name, callback=callback)
 
     def _handle_message(self, message):
-        data = json.loads(message.data.decode('utf-8'))
+        try:
+            data = json.loads(message.data.decode('utf-8'))
+        except Exception:
+            log.warning('Receieved malformed message: {}'.format(message.data))
+            message.ack()
+            return
+
         if not data.get('message'):
             message.ack()
             return
