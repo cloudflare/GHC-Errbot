@@ -221,7 +221,13 @@ class GoogleHangoutsChatBackend(ErrBot):
         return subscriber.subscribe(subscription_name, callback=callback)
 
     def _handle_message(self, message):
-        data = json.loads(message.data.decode('utf-8'))
+        try:
+            data = json.loads(message.data.decode('utf-8'))
+        except Exception:
+            log.warning('Receieved malformed message: {}'.format(message.data))
+            message.ack()
+            return
+
         if not data.get('message'):
             message.ack()
             return
@@ -254,6 +260,16 @@ class GoogleHangoutsChatBackend(ErrBot):
             'text': self.md.convert(message.body)
         }
 
+        if thread_id:
+            message_payload['thread'] = {'name': thread_id}
+
+        self.chat_api.create_message(space_id, message_payload)
+
+    def send_card(self, cards, space_id, thread_id=None):
+        log.info("Sending card")
+        message_payload = {
+            'cards': cards
+        }
         if thread_id:
             message_payload['thread'] = {'name': thread_id}
 
