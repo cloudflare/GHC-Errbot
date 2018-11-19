@@ -252,12 +252,16 @@ class GoogleHangoutsChatBackend(ErrBot):
         super(GoogleHangoutsChatBackend, self).send_message(message)
         log.info("Sending {}".format(message.body))
         space_id = message.extras.get('space_id', None)
+        convert_markdown = message.extras.get('markdown', True)
         if not space_id:
             log.info(message.body)
             return
         thread_id = message.extras.get('thread_id', None)
+        text = message.body
+        if convert_markdown:
+            text = self.md.convert(message.body)
         message_payload = {
-            'text': self.md.convert(message.body)
+            'text': text
         }
 
         if thread_id:
