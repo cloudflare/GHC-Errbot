@@ -228,7 +228,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             message.ack()
             return
 
-        if not data.get('message'):
+        if not data.get('message') or not data.get('message', {}).get('text'):
             message.ack()
             return
         sender_blob = data['message']['sender']
