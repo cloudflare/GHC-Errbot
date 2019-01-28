@@ -34,6 +34,9 @@ class GoogleHangoutsChatAPI:
     # Numbe of results to fetch at a time. Default is 100, Max is 1000
     page_size = 500
 
+    # Maximum length of any single message sent to google chat
+    max_message_length = 4096
+
     def __init__(self, creds_file: str, scope: str = 'https://www.googleapis.com/auth/chat.bot'):
         self.creds_file = creds_file
         self.scope = scope
@@ -248,6 +251,27 @@ class GoogleHangoutsChatBackend(ErrBot):
             msg.to = self.bot_identifier
         self.callback_message(msg)
 
+
+    def _split_message(self, text, maximum_message_length=GoogleHangoutsChatAPI.max_message_length):
+        '''
+        Splits a given string up into multiple strings all of length less than some maximum size
+
+        Edge Case: We don't handle the case where one line is big enough for a whole message
+        '''
+        lines = text.split('\n')
+        messages = []
+        current_message = ''
+        for line in lines:
+            if len(current_message) + len(line) + 1 > maximum_message_length:
+                messages.append(current_message)
+                current_message = line + '\n'
+            else:
+                current_message += line + '\n'
+
+        messages.append(current_message)
+        return messages
+
+
     def send_message(self, message):
         super(GoogleHangoutsChatBackend, self).send_message(message)
         log.info("Sending {}".format(message.body))
@@ -260,14 +284,17 @@ class GoogleHangoutsChatBackend(ErrBot):
         text = message.body
         if convert_markdown:
             text = self.md.convert(message.body)
-        message_payload = {
-            'text': text
-        }
+        sub_messages = self._split_message(text)
+        log.info("Split message into {} parts".format(len(sub_messages)))
+        for message in sub_messages:
+            message_payload = {
+                'text': message
+            }
 
-        if thread_id:
-            message_payload['thread'] = {'name': thread_id}
+            if thread_id:
+                message_payload['thread'] = {'name': thread_id}
 
-        self.chat_api.create_message(space_id, message_payload)
+            self.chat_api.create_message(space_id, message_payload)
 
     def send_card(self, cards, space_id, thread_id=None):
         log.info("Sending card")
@@ -293,7 +320,6 @@ class GoogleHangoutsChatBackend(ErrBot):
         except KeyboardInterrupt:
             log.info("Exiting")
         finally:
-            subscription.close()
             self.disconnect_callback()
             self.shutdown()
 
