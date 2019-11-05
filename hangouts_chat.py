@@ -281,6 +281,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             log.info(message.body)
             return
         thread_id = message.extras.get('thread_id', None)
+        mentions = message.extras.get('mentions', None)
         text = message.body
         if convert_markdown:
             text = self.md.convert(message.body)
@@ -290,7 +291,24 @@ class GoogleHangoutsChatBackend(ErrBot):
             message_payload = {
                 'text': message
             }
-
+            if mentions:
+                message_payload['annotations'] = []
+                for mention in mentions:
+                    message_payload['annotations'].append(
+                        {
+                        "type":"USER_MENTION",
+                        "startIndex":mention['start'],
+                        "length":mention['length'],
+                        "userMention": {
+                            "user": {
+                                "name": mention['user_id'],
+                                "displayName":mention['display_name'],
+                                "type":"HUMAN"
+                            },
+                            "type":"ADD"
+                            }
+                        }
+                    )
             if thread_id:
                 message_payload['thread'] = {'name': thread_id}
 
