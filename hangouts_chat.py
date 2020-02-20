@@ -8,6 +8,8 @@ from errbot.backends.base import Room, RoomError
 from errbot.errBot import ErrBot
 from google.cloud import pubsub
 from oauth2client.service_account import ServiceAccountCredentials
+from cachetools import cached, LRUCache, TTLCache
+
 
 from markdownconverter import hangoutschat_markdown_converter
 
@@ -214,7 +216,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.gce_subscription = identity['GOOGLE_CLOUD_ENGINE_PUBSUB_SUBSCRIPTION']
         self.chat_api = GoogleHangoutsChatAPI(self.creds_file)
         self.bot_identifier = HangoutsChatUser(None, self.at_name, None, None)
-
+        self.message_cache = LRUCache(1024)
         self.md = hangoutschat_markdown_converter()
 
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name, callback):
@@ -241,6 +243,13 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob['type'])
         message_body = data['message']['text']
         message.ack()
+        # message.ack() may fail silently, so we should ensure our messages are somewhat indempotent
+        message_id = "{}{}{}{}".format(data['message']['eventTime'],sender_blob['name'],data['message']['thread']['name'],len(message_body))
+        cached = self.message_cache.get(message_id)
+        if cached is not None:
+            return
+        self.message_cache[message_id] = True
+
         context = {
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
