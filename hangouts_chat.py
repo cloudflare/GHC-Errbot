@@ -8,7 +8,7 @@ from errbot.backends.base import Room, RoomError
 from errbot.errBot import ErrBot
 from google.cloud import pubsub
 from oauth2client.service_account import ServiceAccountCredentials
-from cachetools import cached, LRUCache, TTLCache
+from cachetools import LRUCache
 
 
 from markdownconverter import hangoutschat_markdown_converter
@@ -244,7 +244,11 @@ class GoogleHangoutsChatBackend(ErrBot):
         message_body = data['message']['text']
         message.ack()
         # message.ack() may fail silently, so we should ensure our messages are somewhat indempotent
-        message_id = "{}{}{}{}".format(data['message']['eventTime'],sender_blob['name'],data['message']['thread']['name'],len(message_body))
+        time = data.get('message', {}).get('eventTime', 0)
+        send_name = sender_blob.get('name', '')
+        thread_name = data.get('message', {}).get('thread', {}).get('name', '')
+        body_length = len(message_body)
+        message_id = "{}{}{}{}".format(time, send_name, thread_name, body_length)
         cached = self.message_cache.get(message_id)
         if cached is not None:
             return
