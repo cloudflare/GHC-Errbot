@@ -229,7 +229,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         try:
             data = json.loads(message.data.decode('utf-8'))
         except Exception:
-            log.warning('Receieved malformed message: {}'.format(message.data))
+            log.warning('Received malformed message: {}'.format(message.data))
             message.ack()
             return
 
@@ -244,7 +244,10 @@ class GoogleHangoutsChatBackend(ErrBot):
         message_body = data['message']['text']
         message.ack()
         # message.ack() may fail silently, so we should ensure our messages are somewhat indempotent
-        time = data.get('message', {}).get('eventTime', 0)
+        time = data.get('eventTime', 0)
+        if time == 0:
+            log.warning('Received 0 eventTime from message')
+
         send_name = sender_blob.get('name', '')
         thread_name = data.get('message', {}).get('thread', {}).get('name', '')
         body_length = len(message_body)
