@@ -42,3 +42,7 @@ BOT_IDENTITY = {
 
 # Acknowledgement
 The code in `markdownconverter.py` is from https://github.com/dr-BEat/errbot-backend-hangoutschat. It is MIT licensed.
+
+# License
+
+Licensed under the BSD 3 License.
