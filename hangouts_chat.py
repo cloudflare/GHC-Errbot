@@ -297,6 +297,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             log.info(message.body)
             return
         thread_id = message.extras.get('thread_id', None)
+        thread_key = message.extras.get('thread_key', None)
         mentions = message.extras.get('mentions', None)
         text = message.body
         if convert_markdown:
@@ -328,7 +329,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             if thread_id:
                 message_payload['thread'] = {'name': thread_id}
 
-            self.chat_api.create_message(space_id, message_payload)
+            self.chat_api.create_message(space_id, message_payload, thread_key)
 
     def send_card(self, cards, space_id, thread_id=None):
         log.info("Sending card")
