@@ -15,6 +15,10 @@ from markdownconverter import hangoutschat_markdown_converter
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
+def removeprefix(source: str, prefix: str):
+    if source.startswith(prefix):
+        return source[len(prefix):]
+    return source
 
 class RoomsNotSupportedError(RoomError):
     def __init__(self, message=None):
@@ -99,16 +103,16 @@ class GoogleHangoutsChatAPI:
         return self._list('spaces', 'spaces')
 
     def get_space(self, name: str) -> Optional[dict]:
-        return self._request('spaces/{}'.format(name.lstrip('spaces/')))
+        return self._request('spaces/{}'.format(removeprefix(name, 'spaces/')))
 
     def get_members(self, space_name: str) -> Iterable[dict]:
-        return self._list('spaces/{}/members'.format(space_name.lstrip('spaces/')), 'memberships')
+        return self._list('spaces/{}/members'.format(removeprefix(space_name, 'spaces/')), 'memberships')
 
     def get_member(self, space_name: str, name: str) -> Optional[dict]:
-        return self._request('spaces/{}/members/{}'.format(space_name.lstrip('spaces/'), name))
+        return self._request('spaces/{}/members/{}'.format(removeprefix(space_name, 'spaces/'), name))
 
     def create_message(self, space_name: str, body: dict, thread_key: str = None) -> Optional[dict]:
-        url = 'spaces/{}/messages'.format(space_name.lstrip('spaces/'))
+        url = 'spaces/{}/messages'.format(removeprefix(space_name, 'spaces/'))
         if thread_key is None:
             return self._request(url, body=json.dumps(body), method='POST')
         else:
