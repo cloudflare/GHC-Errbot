@@ -33,7 +33,7 @@ class GoogleHangoutsChatAPI:
     See: https://developers.google.com/hangouts/chat/reference/rest/
     """
     base_url = 'https://chat.googleapis.com/v1'
-    # Numbe of results to fetch at a time. Default is 100, Max is 1000
+    # Number of results to fetch at a time. Default is 100, Max is 1000
     page_size = 500
 
     # Maximum length of any single message sent to google chat
@@ -243,7 +243,7 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob['type'])
         message_body = data['message']['text']
         message.ack()
-        # message.ack() may fail silently, so we should ensure our messages are somewhat indempotent
+        # message.ack() may fail silently, so we should ensure our messages are somewhat idempotent
         time = data.get('eventTime', 0)
         if time == 0:
             log.warning('Received 0 eventTime from message')
