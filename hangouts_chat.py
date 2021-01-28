@@ -262,6 +262,8 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.message_cache[message_id] = True
 
         context = {
+            'argument_text': data['message'].get('argumentText',''),
+            'slash_command_id': data['message'].get('slashCommand',{}).get('commandId',None),
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
         }
