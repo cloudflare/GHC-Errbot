@@ -15,10 +15,12 @@ from markdownconverter import hangoutschat_markdown_converter
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
+
 def removeprefix(source: str, prefix: str):
     if source.startswith(prefix):
         return source[len(prefix):]
     return source
+
 
 class RoomsNotSupportedError(RoomError):
     def __init__(self, message=None):
@@ -124,6 +126,7 @@ class HangoutsChatRoom(Room):
     """
     Represents a 'Space' in Google-Hangouts-Chat terminology
     """
+
     def __init__(self, space_id, chat_api):
         super().__init__()
         self.space_id = space_id
@@ -271,7 +274,6 @@ class GoogleHangoutsChatBackend(ErrBot):
             msg.to = self.bot_identifier
         self.callback_message(msg)
 
-
     def _split_message(self, text, maximum_message_length=GoogleHangoutsChatAPI.max_message_length):
         '''
         Splits a given string up into multiple strings all of length less than some maximum size
@@ -290,7 +292,6 @@ class GoogleHangoutsChatBackend(ErrBot):
 
         messages.append(current_message)
         return messages
-
 
     def send_message(self, message):
         super(GoogleHangoutsChatBackend, self).send_message(message)
@@ -317,16 +318,16 @@ class GoogleHangoutsChatBackend(ErrBot):
                 for mention in mentions:
                     message_payload['annotations'].append(
                         {
-                        "type":"USER_MENTION",
-                        "startIndex":mention['start'],
-                        "length":mention['length'],
-                        "userMention": {
-                            "user": {
-                                "name": mention['user_id'],
-                                "displayName":mention['display_name'],
-                                "type":"HUMAN"
-                            },
-                            "type":"ADD"
+                            "type": "USER_MENTION",
+                            "startIndex": mention['start'],
+                            "length": mention['length'],
+                            "userMention": {
+                                "user": {
+                                    "name": mention['user_id'],
+                                    "displayName": mention['display_name'],
+                                    "type": "HUMAN"
+                                },
+                                "type": "ADD"
                             }
                         }
                     )
