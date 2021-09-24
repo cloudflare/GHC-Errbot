@@ -1,8 +1,9 @@
 import json
+from re import I
 import httplib2
 import logging
 from typing import Iterable, Optional
-from errbot.backends.base import Message
+from errbot.backends.base import Message, Card
 from errbot.backends.base import Person
 from errbot.backends.base import Room, RoomError
 from errbot.errBot import ErrBot
@@ -31,6 +32,14 @@ class RoomsNotSupportedError(RoomError):
                 "expose this functionality to bots"
             )
         super().__init__(message)
+
+
+class MalformedCardError(Exception):
+    def __init__(self, card: Card, message: str):
+        super().__init__((
+            "Malformed or unexpected card data provided:\n"
+            f"  {message}"
+        ))
 
 
 class GoogleHangoutsChatAPI:
@@ -293,16 +302,20 @@ class GoogleHangoutsChatBackend(ErrBot):
         messages.append(current_message)
         return messages
 
+    def prep_message_context(self, message):
+        space_id = message.extras.get('space_id', None)
+        thread_id = message.extras.get('thread_id', None)
+        thread_key = message.extras.get('thread_key', None)
+        return space_id, thread_id, thread_key
+
     def send_message(self, message):
         super(GoogleHangoutsChatBackend, self).send_message(message)
         log.info("Sending {}".format(message.body))
-        space_id = message.extras.get('space_id', None)
         convert_markdown = message.extras.get('markdown', True)
+        space_id, thread_id, thread_key = self.prep_message_context(message)
         if not space_id:
             log.info(message.body)
             return
-        thread_id = message.extras.get('thread_id', None)
-        thread_key = message.extras.get('thread_key', None)
         mentions = message.extras.get('mentions', None)
         text = message.body
         if convert_markdown:
@@ -336,7 +349,8 @@ class GoogleHangoutsChatBackend(ErrBot):
 
             self.chat_api.create_message(space_id, message_payload, thread_key)
 
-    def send_card(self, cards, space_id, thread_id=None):
+    # Legacy send_card signature.  This is being deprecated in favor of errbot upstream signature that matches other built-in plugins.
+    def send_card_deprecated(self, cards, space_id, thread_id=None):
         log.info("Sending card")
         message_payload = {
             'cards': cards
@@ -345,6 +359,98 @@ class GoogleHangoutsChatBackend(ErrBot):
             message_payload['thread'] = {'name': thread_id}
 
         self.chat_api.create_message(space_id, message_payload)
+
+    # Creates a message body following the card format described in google dev docs
+    # https://developers.google.com/chat/reference/message-formats/cards
+    def send_card(self, errbot_card: Card, space_id=None, thread_id=None):
+        if not isinstance(errbot_card, Card):
+            log.warning("deprecated signature of 'send_card' method called, recommend changing to current version that matches upstream signature.")
+            return self.send_card_deprecated(errbot_card, space_id, thread_id)
+
+        log.info(f"Sending card {errbot_card.title}...")
+
+        if not errbot_card.title:
+            raise MalformedCardError(errbot_card, "'title' field required")
+        ghc_card = {
+            "header": {
+                "title": errbot_card.title,
+            },
+            "sections": []
+        }
+
+        if errbot_card.summary:
+            ghc_card['header']['subtitle'] = errbot_card.summary
+        if errbot_card.thumbnail:
+            ghc_card['header']['imageUrl'] = errbot_card.thumbnail
+        if errbot_card.link:
+            raise MalformedCardError(errbot_card, "'link' field not supported, please use body field.")
+        if errbot_card.fields:
+            raise MalformedCardError(errbot_card, "'fields' field not supported, please use body field.")
+        if errbot_card.image:
+            raise MalformedCardError(errbot_card, "'image' field not supported, please use body field.")
+        if errbot_card.color:
+            log.debug("card 'color' field not supported.")
+
+        if not errbot_card.body:
+            raise MalformedCardError(errbot_card, "'body' field required")
+
+        ghc_card['sections'] = json.loads(errbot_card.body)
+        # Example of 'sections' body string:
+        # https://developers.google.com/chat/reference/message-formats/cards
+        #
+        # [
+        #     {
+        #         "widgets": [
+        #             {
+        #                 "keyValue": {
+        #                     "topLabel": "Order No.",
+        #                     "content": "12345"
+        #                 }
+        #             },
+        #         ]
+        #     },
+        #     {
+        #         "header": "Location",
+        #         "widgets": [
+        #             {
+        #                 "image": {
+        #                     "imageUrl": "https://maps.googleapis.com/..."
+        #                 }
+        #             }
+        #         ]
+        #     },
+        #     {
+        #         "widgets": [
+        #             {
+        #                 "buttons": [
+        #                     {
+        #                         "textButton": {
+        #                             "text": "OPEN ORDER",
+        #                             "onClick": {
+        #                                 "openLink": {
+        #                                     "url": "https://example.com/orders/..."
+        #                                 }
+        #                             }
+        #                         }
+        #                     }
+        #                 ]
+        #             }
+        #         ]
+        #     }
+        # ]
+
+        message_payload = {
+            'cards': [ghc_card]
+        }
+
+        space_id, thread_id, thread_key = self.prep_message_context(errbot_card.parent)
+        if not space_id:
+            log.info(f"No space_id for card titled '{errbot_card.title}', not sending.")
+            return
+        if thread_id:
+            message_payload['thread'] = {'name': thread_id}
+
+        self.chat_api.create_message(space_id, message_payload, thread_key)
 
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project,
