@@ -1,5 +1,4 @@
 import json
-from re import I
 import httplib2
 import logging
 from typing import Iterable, Optional
