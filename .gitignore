@@ -4,3 +4,5 @@ bin
 lib
 include
 *.json
+.venv
+requirements.txt

@@ -7,7 +7,7 @@ It allows you to use errbot to create bots, but as always, it's a work in progre
 ## Installation
 
 ```
-git clone https://github.com/sinkingpoint/GHC-Errbot
+git clone https://github.com/cloudflare/GHC-Errbot
 ```
 
 and then
