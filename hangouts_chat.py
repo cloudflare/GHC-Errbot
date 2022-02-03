@@ -398,8 +398,8 @@ class GoogleHangoutsChatBackend(ErrBot):
             # but we need this in order to get the thread_id from a thread_key generated message
 
             return None if gc == None else {
-                'space_id': gc['space']['name'],
-                'thread_id': gc['thread']['name'],
+                'space_id': gc.get('space', {}).get('name', ''),
+                'thread_id': gc.get('thread', {}).get('name', ''),
                 'thread_key': thread_key
             }
 
