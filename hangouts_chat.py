@@ -83,6 +83,7 @@ class GoogleHangoutsChatAPI:
             return content_json
         else:
             log.error('status: {}, content: {}'.format(result['status'], content))
+            return None
 
     def _list(self, resource: str, return_attr: str, next_page_token: str = '') -> Iterable[dict]:
         """
@@ -391,7 +392,16 @@ class GoogleHangoutsChatBackend(ErrBot):
             if thread_id:
                 message_payload['thread'] = {'name': thread_id}
 
-            self.chat_api.create_message(space_id, message_payload, thread_key)
+            gc = self.chat_api.create_message(space_id, message_payload, thread_key)
+
+            # errbot expects no return https://errbot.readthedocs.io/en/latest/errbot.core.html#errbot.core.ErrBot.send_message
+            # but we need this in order to get the thread_id from a thread_key generated message
+
+            return None if gc == None else {
+                'space_id': gc['space']['name'],
+                'thread_id': gc['thread']['name'],
+                'thread_key': thread_key
+            }
 
     # Legacy send_card signature.  This is being deprecated in favor of errbot upstream signature that matches other built-in plugins.
     def send_card_deprecated(self, cards, space_id, thread_id=None):
