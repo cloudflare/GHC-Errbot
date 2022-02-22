@@ -85,6 +85,20 @@ class GoogleHangoutsChatAPI:
             log.error('status: {}, content: {}'.format(result['status'], content))
             return None
 
+    def _download(self, uri: str) -> Optional[bytes]:
+        request_args = {
+            'method': 'GET',
+            'headers': {'Content-Type': 'application/octet-stream', }}
+        result, content = self.client.request(
+            uri=uri,
+            **request_args
+        )
+        if result['status'] == '200':
+            return content
+        else:
+            log.error('status: {}, content: {}'.format(result['status'], content))
+            return None
+
     def _list(self, resource: str, return_attr: str, next_page_token: str = '') -> Iterable[dict]:
         """
         Gets a list of resources.
@@ -310,6 +324,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             log.info(f"Unsupported CARD_CLICKED event action method name '{action_method_name}' received")
 
     def handle_event_MESSAGE(self, data):
+        # https://developers.google.com/chat/api/guides/message-formats/events#message
         sender_blob = data.get('message', {}).get('sender', {})
         sender = HangoutsChatUser(sender_blob.get('name', ''),
                                   sender_blob.get('displayName', ''),
@@ -320,6 +335,12 @@ class GoogleHangoutsChatBackend(ErrBot):
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
         }
+
+        if 'attachment' in data['message']:
+            context['attachment'] = data['message']['attachment']
+        # pass httplib2.Http() authenticated handler to errbot. uselful to download attachments
+        context['downloader'] = self.chat_api._download
+
         msg = Message(body=message_body.strip(), frm=sender, extras=context)
 
         is_dm = data['message']['space']['type'] == 'DM'

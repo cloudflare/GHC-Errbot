@@ -40,9 +40,39 @@ BOT_IDENTITY = {
 
 5. Set BOT_PREFIX to the name of the bot, including the mention(`@`)
 
+# Examples
+
+## Attachments
+
+This backend supports attachments in [message events][1]. To download a Google Chat upload attachment, we need to use the [GetAttachment API][2] and HTTP GET request with _Bearer authentication_. Since the backend is already authenticated, we opportunistically provide a ready-to-use _downloader_ object with the message context, so that errbot [plugins][3] can use it to directly download the attachments, no extra steps required.
+
+Here's a code example on how to use the downloader helper in a errbot plugin:
+
+```python
+from io import BytesIO
+from errbot import BotPlugin, botcmd
+
+@botcmd(split_args_with=None)
+def upload(self, msg, args):
+    attachments = msg._extras.get('attachment', [])
+    for attachment in attachments:
+        if attachment['source'] == 'UPLOADED_CONTENT':
+            url = f"""https://chat.googleapis.com/v1/media/{ attachment['attachmentDataRef']['resourceName'] }?alt=media"""
+            downloader = msg._extras.get('downloader')
+            content = downloader(url)
+            if content != None:
+                d = BytesIO()
+                d.write(content)
+                # jira.add_attachment(issue=issue, attachment=d, filename=attachment['contentName'])
+```
+
 # Acknowledgement
 The code in `markdownconverter.py` is from https://github.com/dr-BEat/errbot-backend-hangoutschat. It is MIT licensed.
 
 # License
 
 Licensed under the BSD 3 License.
+
+[1]: https://developers.google.com/chat/api/guides/message-formats/events#message
+[2]: https://developers.google.com/chat/how-tos/get-attachment
+[3]: https://errbot.readthedocs.io/en/latest/errbot.botplugin.html
