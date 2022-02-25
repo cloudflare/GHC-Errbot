@@ -330,7 +330,7 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob.get('displayName', ''),
                                   sender_blob.get('email', ''),
                                   sender_blob.get('type', ''))
-        message_body = data['message']['text']
+        message_body = data['message'].get('text','')
         context = {
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name']
