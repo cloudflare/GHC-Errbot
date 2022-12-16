@@ -142,7 +142,7 @@ class GoogleHangoutsChatAPI:
             return self._request(url, body=json.dumps(body), method='POST')
         else:
             return self._request(url, body=json.dumps(body), method='POST',
-                                 query_string='threadKey={}'.format(thread_key))
+                                 query_string='threadKey={}&messageReplyOption={}'.format(thread_key, 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD'))
 
 
 class HangoutsChatRoom(Room):
