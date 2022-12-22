@@ -136,14 +136,21 @@ class GoogleHangoutsChatAPI:
     def get_member(self, space_name: str, name: str) -> Optional[dict]:
         return self._request('spaces/{}/members/{}'.format(removeprefix(space_name, 'spaces/'), name))
 
-    def create_message(self, space_name: str, body: dict, thread_key: str = None) -> Optional[dict]:
+    def create_message(self, space_name: str, body: dict, thread_state: str = None, thread_key: str = None) -> Optional[dict]:
         url = 'spaces/{}/messages'.format(removeprefix(space_name, 'spaces/'))
-        if thread_key is None:
-            return self._request(url, body=json.dumps(body), method='POST')
-        else:
+        
+        # If using a thread key, set messageReplyOption and thread key querystring
+        if thread_key is not None:
             return self._request(url, body=json.dumps(body), method='POST',
-                                 query_string='threadKey={}'.format(thread_key))
-
+                                    query_string='threadKey={}&messageReplyOption={}'.format(thread_key, 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD'))
+        
+        # if space is using new threading and there is a thread_id set, set messageReplyOption to keep messages in that thread
+        if thread_state == 'THREADED_MESSAGES' and body.get('thread', {}).get('name', '') != '':
+            return self._request(url, body=json.dumps(body), method='POST',
+                                    query_string='messageReplyOption={}'.format('REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD'))
+        
+        # otherwise, post the message
+        return self._request(url, body=json.dumps(body), method='POST')
 
 class HangoutsChatRoom(Room):
     """
@@ -333,7 +340,8 @@ class GoogleHangoutsChatBackend(ErrBot):
         message_body = data['message'].get('text','')
         context = {
             'space_id': data['space']['name'],
-            'thread_id': data['message']['thread']['name']
+            'thread_id': data['message']['thread']['name'],
+            'thread_state': data['space']['spaceThreadingState']
         }
 
         if 'attachment' in data['message']:
@@ -372,13 +380,14 @@ class GoogleHangoutsChatBackend(ErrBot):
         space_id = message.extras.get('space_id', None)
         thread_id = message.extras.get('thread_id', None)
         thread_key = message.extras.get('thread_key', None)
-        return space_id, thread_id, thread_key
+        thread_state = message.extras.get('thread_state', None)
+        return space_id, thread_id, thread_key, thread_state
 
     def send_message(self, message):
         super(GoogleHangoutsChatBackend, self).send_message(message)
         log.info("Sending {}".format(message.body))
         convert_markdown = message.extras.get('markdown', True)
-        space_id, thread_id, thread_key = self.prep_message_context(message)
+        space_id, thread_id, thread_key, thread_state = self.prep_message_context(message)
         if not space_id:
             log.info(message.body)
             return
@@ -413,7 +422,7 @@ class GoogleHangoutsChatBackend(ErrBot):
             if thread_id:
                 message_payload['thread'] = {'name': thread_id}
 
-            gc = self.chat_api.create_message(space_id, message_payload, thread_key)
+            gc = self.chat_api.create_message(space_id, message_payload, thread_state, thread_key)
 
             # errbot expects no return https://errbot.readthedocs.io/en/latest/errbot.core.html#errbot.core.ErrBot.send_message
             # but we need this in order to get the thread_id from a thread_key generated message
@@ -518,14 +527,14 @@ class GoogleHangoutsChatBackend(ErrBot):
             'cards': [ghc_card]
         }
 
-        space_id, thread_id, thread_key = self.prep_message_context(errbot_card.parent)
+        space_id, thread_id, thread_key, thread_state = self.prep_message_context(errbot_card.parent)
         if not space_id:
             log.info(f"No space_id for card titled '{errbot_card.title}', not sending.")
             return
         if thread_id:
             message_payload['thread'] = {'name': thread_id}
 
-        self.chat_api.create_message(space_id, message_payload, thread_key)
+        self.chat_api.create_message(space_id, message_payload, thread_state, thread_key)
 
     def serve_forever(self):
         subscription = self._subscribe_to_pubsub_topic(self.gce_project,
