@@ -166,7 +166,7 @@ class HangoutsChatRoom(Room):
     def _load(self):
         space = self.chat_api.get_space(self.space_id)
         self.does_exist = bool(space)
-        self.display_name = space['displayName'] if self.does_exist else ''
+        self.display_name = space.get('displayName','') if self.does_exist else ''
 
     def join(self, username=None, password=None):
         raise RoomsNotSupportedError()
