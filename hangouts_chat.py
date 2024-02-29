@@ -12,6 +12,7 @@ from cachetools import LRUCache
 
 
 from markdownconverter import hangoutschat_markdown_converter
+from prometheus import PrometheusMetrics
 
 log = logging.getLogger('errbot.backends.hangoutschat')
 
@@ -256,6 +257,11 @@ class GoogleHangoutsChatBackend(ErrBot):
         self.event_cache = LRUCache(1024)
         self.md = hangoutschat_markdown_converter()
 
+        # Initialize prometheus metrics if metrics port is configured
+        self.prometheus = None
+        if config.METRICS_PORT is not None:
+            self.prometheus = PrometheusMetrics(self.at_name, int(config.METRICS_PORT))
+
     def _subscribe_to_pubsub_topic(self, project, topic_name, subscription_name, callback):
         subscriber = pubsub.SubscriberClient()
         subscription_name = 'projects/{}/subscriptions/{}'.format(project, subscription_name)
@@ -424,6 +430,10 @@ class GoogleHangoutsChatBackend(ErrBot):
 
             gc = self.chat_api.create_message(space_id, message_payload, thread_state, thread_key)
 
+            # record sent message success or failure
+            if self.prometheus is not None and self.prometheus.metric('message_sent'):
+                self.prometheus.metric('message_sent').labels(status=('failure' if gc == None else 'success')).inc()
+
             # errbot expects no return https://errbot.readthedocs.io/en/latest/errbot.core.html#errbot.core.ErrBot.send_message
             # but we need this in order to get the thread_id from a thread_key generated message
 
@@ -542,6 +552,9 @@ class GoogleHangoutsChatBackend(ErrBot):
                                                        self.gce_subscription,
                                                        self._handle_event)
         self.connect_callback()
+
+        if self.prometheus is not None:
+            self.prometheus.start_server()
 
         try:
             import time

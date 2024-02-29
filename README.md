@@ -40,6 +40,8 @@ BOT_IDENTITY = {
 
 5. Set BOT_PREFIX to the name of the bot, including the mention(`@`)
 
+6. (optional) To enable prometheus metrics, set METRICS_PORT to an integer. This will be the port you want to open for metrics.
+
 # Examples
 
 ## Attachments
