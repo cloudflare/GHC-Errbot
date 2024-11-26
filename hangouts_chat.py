@@ -345,6 +345,8 @@ class GoogleHangoutsChatBackend(ErrBot):
                                   sender_blob.get('type', ''))
         message_body = data['message'].get('text','')
         context = {
+            'argument_text': data['message'].get('argumentText',''),
+            'slash_command_id': data['message'].get('slashCommand',{}).get('commandId',None),
             'space_id': data['space']['name'],
             'thread_id': data['message']['thread']['name'],
             'thread_state': data['space']['spaceThreadingState']
