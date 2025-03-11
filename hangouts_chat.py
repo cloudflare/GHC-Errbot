@@ -346,6 +346,7 @@ class GoogleHangoutsChatBackend(ErrBot):
         message_body = data['message'].get('text','')
         context = {
             'space_id': data['space']['name'],
+            'message_id': data['message']['name'],
             'thread_id': data['message']['thread']['name'],
             'thread_state': data['space']['spaceThreadingState']
         }
@@ -439,6 +440,7 @@ class GoogleHangoutsChatBackend(ErrBot):
 
             return None if gc == None else {
                 'space_id': gc.get('space', {}).get('name', ''),
+                'message_id': gc.get('name', ''),
                 'thread_id': gc.get('thread', {}).get('name', ''),
                 'thread_key': thread_key
             }
